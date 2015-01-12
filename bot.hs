@@ -5,13 +5,16 @@ import System.Exit
 import Control.Arrow
 import Control.Monad.Reader
 import Control.Exception
+import Control.Concurrent
 import Text.Printf
- 
+import System.Process
+
 server = "irc.freenode.org"
 port   = 6667
-chan   = "#tutbot-testing"
-nick   = "tutbot"
- 
+chan   = "##itb"
+-- chan   = "##itbtestmybot"
+nick   = "clonebot"
+
 -- The 'Net' monad, a wrapper over IO, carrying the bot's immutable state.
 type Net = ReaderT Bot IO
 data Bot = Bot { socket :: Handle }
@@ -59,12 +62,25 @@ listen h = forever $ do
 -- Dispatch a command
 eval :: String -> Net ()
 eval     "!quit"               = write "QUIT" ":Exiting" >> io (exitWith ExitSuccess)
+eval     "!help"               = privmsg "help yourself"
+eval     "!lunchy-munchy"      = messageProcess "./LunchParse"
 eval x | "!id " `isPrefixOf` x = privmsg (drop 4 x)
 eval     _                     = return () -- ignore everything else
+
+messageProcess :: String -> Net ()
+messageProcess cmd = do
+    (_, Just hout, Just herr, jHandle) <- io $ createProcess (proc cmd [])
+                                              { cwd = Just "."
+                                              , std_out = CreatePipe
+                                              , std_err = CreatePipe }
+    (io $ hGetContents hout) >>= privmsg
+
+    exitCode <- io $ waitForProcess jHandle
+    io $ putStrLn $ "Exit code: " ++ show exitCode
  
 -- Send a privmsg to the current chan + server
 privmsg :: String -> Net ()
-privmsg s = write "PRIVMSG" (chan ++ " :" ++ s)
+privmsg s = mapM_ (\l -> write "PRIVMSG" (chan ++ " :" ++ l)) $ lines s
  
 -- Send a message out to the server we're currently connected to
 write :: String -> String -> Net ()
@@ -72,6 +88,9 @@ write s t = do
     h <- asks socket
     io $ hPrintf h "%s %s\r\n" s t
     io $ printf    "> %s %s\n" s t
+    io $ threadDelay $ round $ secondsDelay * 1000000
+  where
+    secondsDelay = 1
  
 -- Convenience.
 io :: IO a -> Net a
