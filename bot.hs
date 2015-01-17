@@ -1,3 +1,8 @@
+{-# LANGUAGE OverloadedStrings #-}
+import Network.SimpleIRC
+import Data.Maybe
+import qualified Data.ByteString.Char8 as B
+
 import Data.List
 import Network
 import System.IO
@@ -8,91 +13,46 @@ import Control.Exception
 import Control.Concurrent
 import Text.Printf
 import System.Process
+import System.Environment ( getArgs )
 
-server = "irc.freenode.org"
-port   = 6667
-chan   = "##itb"
--- chan   = "##itbtestmybot"
-nick   = "clonebot"
+import Control.Applicative
 
--- The 'Net' monad, a wrapper over IO, carrying the bot's immutable state.
-type Net = ReaderT Bot IO
-data Bot = Bot { socket :: Handle }
- 
+mkConnection c n = (mkDefaultConfig "irc.freenode.org" n)
+  { cChannels = [c]
+  , cEvents = events
+  }
+
 -- Set up actions to run on start and end, and run the main loop
-main :: IO ()
-main = bracket connect disconnect loop
-  where
-    disconnect = hClose . socket
-    loop st    = runReaderT run st
- 
--- Connect to the server and return the initial bot state
-connect :: IO Bot
-connect = notify $ do
-    h <- connectTo server (PortNumber (fromIntegral port))
-    hSetBuffering h NoBuffering
-    return (Bot h)
-  where
-    notify a = bracket_
-        (printf "Connecting to %s ... " server >> hFlush stdout)
-        (putStrLn "done.")
-        a
- 
--- We're in the Net monad now, so we've connected successfully
--- Join a channel, and start processing commands
-run :: Net ()
-run = do
-    write "NICK" nick
-    write "USER" (nick++" 0 * :tutorial bot")
-    write "JOIN" chan
-    asks socket >>= listen
- 
--- Process each line from the server
-listen :: Handle -> Net ()
-listen h = forever $ do
-    s <- init `fmap` io (hGetLine h)
-    io (putStrLn s)
-    if ping s then pong s else eval (clean s)
-  where
-    forever a = a >> forever a
-    clean     = drop 1 . dropWhile (/= ':') . drop 1
-    ping x    = "PING :" `isPrefixOf` x
-    pong x    = write "PONG" (':' : drop 6 x)
- 
--- Dispatch a command
-eval :: String -> Net ()
-eval     "!quit"               = write "QUIT" ":Exiting" >> io (exitWith ExitSuccess)
-eval     "!help"               = privmsg "help yourself"
-eval     "!lunchy-munchy"      = messageProcess "./LunchParse"
-eval x | "!id " `isPrefixOf` x = privmsg (drop 4 x)
-eval     _                     = return () -- ignore everything else
+main = do
+    [c, n] <- getArgs
+    let connection = mkConnection c n
+    connect connection False True
 
-messageProcess :: String -> Net ()
-messageProcess cmd = do
-    (_, Just hout, Just herr, jHandle) <- io $ createProcess (proc cmd [])
+-- Dispatch a command
+onMessage :: EventFunc
+onMessage s m
+  | msg == "!quit"             = putStrLn ":Exiting" >> (exitWith ExitSuccess)
+  | msg == "!help"             = sendMsg s chan "help yourself"
+  | msg == "!lunchy-munchy"    = do
+        menu <- getMessageProcess "./LunchParse"
+        sendMsg s chan (B.pack menu)
+  | "!id " `B.isPrefixOf` msg = sendMsg s chan (B.drop 4 msg)
+  | otherwise                   = return () -- ignore everything else
+  where chan = fromJust $ mChan m
+        msg = mMsg m
+
+events = [(Privmsg onMessage)]
+
+
+getMessageProcess :: String -> IO String
+getMessageProcess cmd = do
+    (_, Just hout, Just herr, jHandle) <- createProcess (proc cmd [])
                                               { cwd = Just "."
                                               , std_out = CreatePipe
                                               , std_err = CreatePipe }
-    (io $ hGetContents hout) >>= privmsg
+    exitCode <- waitForProcess jHandle
+    putStrLn $ "Exit code: " ++ show exitCode
 
-    exitCode <- io $ waitForProcess jHandle
-    io $ putStrLn $ "Exit code: " ++ show exitCode
- 
--- Send a privmsg to the current chan + server
-privmsg :: String -> Net ()
-privmsg s = mapM_ (\l -> write "PRIVMSG" (chan ++ " :" ++ l)) $ lines s
- 
--- Send a message out to the server we're currently connected to
-write :: String -> String -> Net ()
-write s t = do
-    h <- asks socket
-    io $ hPrintf h "%s %s\r\n" s t
-    io $ printf    "> %s %s\n" s t
-    io $ threadDelay $ round $ secondsDelay * 1000000
-  where
-    secondsDelay = 1
- 
--- Convenience.
-io :: IO a -> Net a
-io = liftIO
+    hGetContents hout
+
 
