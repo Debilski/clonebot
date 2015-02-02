@@ -3,7 +3,7 @@ import Network
 import System.IO
 import System.Exit
 import Control.Arrow
-import Control.Monad.Reader
+import Control.Monad.RWS
 import Control.Exception
 import Control.Concurrent
 import Text.Printf
@@ -16,7 +16,7 @@ chan   = "##itb"
 nick   = "clonebot"
 
 -- The 'Net' monad, a wrapper over IO, carrying the bot's immutable state.
-type Net = ReaderT Bot IO
+type Net = RWS Bot IO
 data Bot = Bot { socket :: Handle }
  
 -- Set up actions to run on start and end, and run the main loop
@@ -51,7 +51,7 @@ run = do
 listen :: Handle -> Net ()
 listen h = forever $ do
     s <- init `fmap` io (hGetLine h)
-    io (putStrLn s)
+    io (putStrLn s >> hFlush stdout)
     if ping s then pong s else eval (clean s)
   where
     forever a = a >> forever a
@@ -63,7 +63,11 @@ listen h = forever $ do
 eval :: String -> Net ()
 eval     "!quit"               = write "QUIT" ":Exiting" >> io (exitWith ExitSuccess)
 eval     "!help"               = privmsg "help yourself"
+eval     "!please-help"        = privmsg "!lunchy-munchy !is-it-safe-outside? !what-the-load !what-the-swap"
+eval     "!is-it-safe-outside?"= messageProcess "./WeatherParse"
 eval     "!lunchy-munchy"      = messageProcess "./LunchParse"
+eval     "!what-the-load"      = messageProcess "./MonitParse"
+eval     "!what-the-swap"      = messageProcess "./MemParse"
 eval x | "!id " `isPrefixOf` x = privmsg (drop 4 x)
 eval     _                     = return () -- ignore everything else
 
@@ -77,6 +81,7 @@ messageProcess cmd = do
 
     exitCode <- io $ waitForProcess jHandle
     io $ putStrLn $ "Exit code: " ++ show exitCode
+    io $ hFlush stdout
  
 -- Send a privmsg to the current chan + server
 privmsg :: String -> Net ()
