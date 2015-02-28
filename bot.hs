@@ -3,7 +3,7 @@ import Network
 import System.IO
 import System.Exit
 import Control.Arrow
-import Control.Monad.RWS
+import Control.Monad.Reader
 import Control.Exception
 import Control.Concurrent
 import Text.Printf
@@ -16,7 +16,7 @@ chan   = "##itb"
 nick   = "clonebot"
 
 -- The 'Net' monad, a wrapper over IO, carrying the bot's immutable state.
-type Net = RWS Bot IO
+type Net = ReaderT Bot IO
 data Bot = Bot { socket :: Handle }
  
 -- Set up actions to run on start and end, and run the main loop
@@ -63,11 +63,12 @@ listen h = forever $ do
 eval :: String -> Net ()
 eval     "!quit"               = write "QUIT" ":Exiting" >> io (exitWith ExitSuccess)
 eval     "!help"               = privmsg "help yourself"
-eval     "!please-help"        = privmsg "!lunchy-munchy !is-it-safe-outside? !what-the-load !what-the-swap"
+eval     "!please-help"        = privmsg "!lunchy-munchy !is-it-safe-outside? !what-the-load !what-the-swap !what-the-dickens"
 eval     "!is-it-safe-outside?"= messageProcess "./WeatherParse"
 eval     "!lunchy-munchy"      = messageProcess "./LunchParse"
 eval     "!what-the-load"      = messageProcess "./MonitParse"
 eval     "!what-the-swap"      = messageProcess "./MemParse"
+eval     "!what-the-dickens"      = messageProcess "./BookPrint"
 eval x | "!id " `isPrefixOf` x = privmsg (drop 4 x)
 eval     _                     = return () -- ignore everything else
 
