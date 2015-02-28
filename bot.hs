@@ -78,9 +78,7 @@ commands = [ Command "!help"                (privmsg "help yourself")
 eval :: String -> Net ()
 eval     "!quit"               = write "QUIT" ":Exiting" >> io (exitWith ExitSuccess)
 eval x | "!id " `isPrefixOf` x = privmsg (drop 4 x)
-eval command                   = case find (\c -> commandName c == command) commands of
-                                   Just command -> commandArg command
-                                   Nothing -> return () -- ignore everything else
+eval command                   = maybe (return ()) commandArg (find (\c -> commandName c == command) commands)
 
 messageProcess :: String -> Net ()
 messageProcess cmd = do
