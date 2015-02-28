@@ -58,19 +58,29 @@ listen h = forever $ do
     clean     = drop 1 . dropWhile (/= ':') . drop 1
     ping x    = "PING :" `isPrefixOf` x
     pong x    = write "PONG" (':' : drop 6 x)
- 
+
+
+data Command = Command { commandName :: String
+                       , commandArg :: Net ()
+                       }
+
+commands :: [Command]
+commands = [ Command "!help"                (privmsg "help yourself")
+           , Command "!please-help"         (privmsg $ intercalate " " (fmap commandName commands))
+           , Command "!lunchy-munchy"       (messageProcess "./LunchParse")
+           , Command "!is-it-safe-outside?" (messageProcess "./WeatherParse")
+           , Command "!what-the-load"       (messageProcess "./MonitParse")
+           , Command "!what-the-swap"       (messageProcess "./MemParse")
+           , Command "!what-the-dickens"    (messageProcess "./BookPrint")
+           ]
+
 -- Dispatch a command
 eval :: String -> Net ()
 eval     "!quit"               = write "QUIT" ":Exiting" >> io (exitWith ExitSuccess)
-eval     "!help"               = privmsg "help yourself"
-eval     "!please-help"        = privmsg "!lunchy-munchy !is-it-safe-outside? !what-the-load !what-the-swap !what-the-dickens"
-eval     "!is-it-safe-outside?"= messageProcess "./WeatherParse"
-eval     "!lunchy-munchy"      = messageProcess "./LunchParse"
-eval     "!what-the-load"      = messageProcess "./MonitParse"
-eval     "!what-the-swap"      = messageProcess "./MemParse"
-eval     "!what-the-dickens"      = messageProcess "./BookPrint"
 eval x | "!id " `isPrefixOf` x = privmsg (drop 4 x)
-eval     _                     = return () -- ignore everything else
+eval command                   = case find (\c -> commandName c == command) commands of
+                                   Just command -> commandArg command
+                                   Nothing -> return () -- ignore everything else
 
 messageProcess :: String -> Net ()
 messageProcess cmd = do
