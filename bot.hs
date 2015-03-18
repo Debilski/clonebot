@@ -9,42 +9,54 @@ import Control.Concurrent
 import Text.Printf
 import System.Process
 
-server = "irc.freenode.org"
-port   = 6667
-chan   = "##itb"
--- chan   = "##itbtestmybot"
-nick   = "clonebot"
+import Options.Applicative
+
+data AppSettings = AppSettings { server :: String
+                 , port :: Int
+                 , chan :: String
+                 , nick :: String }
+
+defaultSettings = AppSettings { server = "irc.freenode.org"
+                              , port   = 6667 }
+-- , chan   = "##itb"
+-- , nick   = "clonebot"
 
 -- The 'Net' monad, a wrapper over IO, carrying the bot's immutable state.
 type Net = ReaderT Bot IO
-data Bot = Bot { socket :: Handle }
+data Bot = Bot { socket :: Handle
+               , botSettings :: AppSettings }
  
 -- Set up actions to run on start and end, and run the main loop
 main :: IO ()
-main = bracket connect disconnect loop
+main = execParser opts >>= \settings -> bracket (connect settings) disconnect (loop settings)
   where
     disconnect = hClose . socket
-    loop st    = runReaderT run st
+    loop settings st    = runReaderT (run settings) st
+    opts = info parser idm
+    parser = AppSettings <$> argument str (metavar "SERVER")
+                         <*> argument auto (metavar "PORT")
+                         <*> argument str (metavar "CHAN")
+                         <*> argument str (metavar "NICK")
  
 -- Connect to the server and return the initial bot state
-connect :: IO Bot
-connect = notify $ do
-    h <- connectTo server (PortNumber (fromIntegral port))
+connect :: AppSettings -> IO Bot
+connect settings = notify $ do
+    h <- connectTo (server settings) (PortNumber (fromIntegral (port settings)))
     hSetBuffering h NoBuffering
-    return (Bot h)
+    return (Bot h settings)
   where
     notify a = bracket_
-        (printf "Connecting to %s ... " server >> hFlush stdout)
+        (printf "Connecting to %s ... " (server settings) >> hFlush stdout)
         (putStrLn "done.")
         a
  
 -- We're in the Net monad now, so we've connected successfully
 -- Join a channel, and start processing commands
-run :: Net ()
-run = do
-    write "NICK" nick
-    write "USER" (nick++" 0 * :tutorial bot")
-    write "JOIN" chan
+run :: AppSettings -> Net ()
+run settings = do
+    write "NICK" (nick settings)
+    write "USER" ((nick settings) ++" 0 * :tutorial bot")
+    write "JOIN" (chan settings)
     asks socket >>= listen
  
 -- Process each line from the server
@@ -94,7 +106,10 @@ messageProcess cmd = do
  
 -- Send a privmsg to the current chan + server
 privmsg :: String -> Net ()
-privmsg s = mapM_ (\l -> write "PRIVMSG" (chan ++ " :" ++ l)) $ lines s
+privmsg s = do
+    settings <- asks botSettings
+    let ch = chan settings
+    mapM_ (\l -> write "PRIVMSG" (ch ++ " :" ++ l)) $ lines s
  
 -- Send a message out to the server we're currently connected to
 write :: String -> String -> Net ()
