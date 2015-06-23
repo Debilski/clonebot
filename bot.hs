@@ -73,28 +73,47 @@ listen h = forever $ do
 
 
 data Command = Command { commandName :: String
-                       , commandArg :: Net ()
+                       , commandArg :: String -> Net ()
                        }
 
 commands :: [Command]
-commands = [ Command "!help"                (privmsg "help yourself")
-           , Command "!please-help"         (privmsg $ intercalate " " (fmap commandName commands))
-           , Command "!lunchy-munchy"       (messageProcess "./LunchParse")
-           , Command "!is-it-safe-outside?" (messageProcess "./WeatherParse")
-           , Command "!what-the-load"       (messageProcess "./MonitParse")
-           , Command "!what-the-swap"       (messageProcess "./MemParse")
-           , Command "!what-the-dickens"    (messageProcess "./BookPrint")
+commands = [ Command "!help"                (\_ -> privmsg "help yourself")
+           , Command "!please-help"         (\_ -> privmsg $ intercalate " " (fmap commandName commands))
+           , Command "!lunchy-munchy"       (\_ -> messageProcess "./LunchParse")
+           , Command "!is-it-safe-outside?" (\a -> messageProcessA "./WeatherParse" (words a))
+           , Command "!what-the-load"       (\_ -> messageProcess "./MonitParse")
+           , Command "!what-the-swap"       (\_ -> messageProcess "./MemParse")
+           , Command "!what-the-dickens"    (\_ -> messageProcess "./BookPrint")
+           , Command "!what-the-math"       (messageLambda)
            ]
 
 -- Dispatch a command
 eval :: String -> Net ()
 eval     "!quit"               = write "QUIT" ":Exiting" >> io (exitWith ExitSuccess)
 eval x | "!id " `isPrefixOf` x = privmsg (drop 4 x)
-eval command                   = maybe (return ()) commandArg (find (\c -> commandName c == command) commands)
+eval msg                       = maybe (return ()) (applyCommand msg) (find (\c -> (commandName c) `isPrefixOf` msg) commands)
+  where
+    applyCommand :: String -> Command -> Net ()
+    applyCommand msg cmd = (commandArg cmd) (drop ((length $ commandName cmd) + 1) msg)
+
+messageLambda :: String -> Net ()
+messageLambda math = do
+    (_, Just hout, Just herr, jHandle) <- io $ createProcess (proc "/usr/bin/cabal" ["exec", "lambdabot", "--", "-e", "> " ++ math])
+                                              { cwd = Just "/home/schuppner/Projects/lambdabot/lambdabot"
+                                              , std_out = CreatePipe
+                                              , std_err = CreatePipe }
+    (io $ hGetContents hout) >>= privmsg
+
+    exitCode <- io $ waitForProcess jHandle
+    io $ putStrLn $ "Exit code: " ++ show exitCode
+    io $ hFlush stdout
 
 messageProcess :: String -> Net ()
-messageProcess cmd = do
-    (_, Just hout, Just herr, jHandle) <- io $ createProcess (proc cmd [])
+messageProcess cmd = messageProcessA cmd []
+
+messageProcessA :: String -> [String] -> Net ()
+messageProcessA cmd args = do
+    (_, Just hout, Just herr, jHandle) <- io $ createProcess (proc cmd args)
                                               { cwd = Just "."
                                               , std_out = CreatePipe
                                               , std_err = CreatePipe }
