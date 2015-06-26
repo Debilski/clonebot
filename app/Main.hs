@@ -77,8 +77,8 @@ data Command = Command { commandName :: String
                        }
 
 commands :: [Command]
-commands = [ Command "!help"                (\_ -> privmsg "help yourself")
-           , Command "!please-help"         (\_ -> privmsg $ intercalate " " (fmap commandName commands))
+commands = [ Command "!help"                (\_ -> privmsg "Usage: !please-help")
+           , Command "!please-help"         (\_ -> privmsg pleaseHelp)
            , Command "!lunchy-munchy"       (\_ -> messageProcess "./LunchParse")
            , Command "!is-it-safe-outside?" (\a -> messageProcessA "./WeatherParse" (words a))
            , Command "!what-the-load"       (\_ -> messageProcess "./MonitParse")
@@ -86,6 +86,8 @@ commands = [ Command "!help"                (\_ -> privmsg "help yourself")
            , Command "!what-the-dickens"    (\_ -> messageProcess "./BookPrint")
            , Command "!what-the-math"       (messageLambda)
            ]
+
+pleaseHelp = "Available commands: " ++ (intercalate " " (fmap commandName commands)) ++ "\nSee http://blog.itb.pri for more info."
 
 -- Dispatch a command
 eval :: String -> Net ()
