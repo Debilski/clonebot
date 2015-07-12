@@ -1,15 +1,16 @@
+import Control.Arrow
+import Control.Concurrent
+import Control.Concurrent.Async
+import Control.Exception
+import Control.Monad.Reader
+import Control.Monad.State.Lazy
 import Data.List
 import Network
-import System.IO
-import System.Exit
-import Control.Arrow
-import Control.Monad.Reader
-import Control.Exception
-import Control.Concurrent
-import Text.Printf
-import System.Process
-
 import Options.Applicative
+import System.Exit
+import System.IO
+import System.Process
+import Text.Printf
 
 data AppSettings = AppSettings { server :: String
                  , port :: Int
@@ -22,7 +23,7 @@ defaultSettings = AppSettings { server = "irc.freenode.org"
 -- , nick   = "clonebot"
 
 -- The 'Net' monad, a wrapper over IO, carrying the bot's immutable state.
-type Net = ReaderT Bot IO
+type Net = StateT Bot IO
 data Bot = Bot { socket :: Handle
                , botSettings :: AppSettings }
  
@@ -31,7 +32,7 @@ main :: IO ()
 main = execParser opts >>= \settings -> bracket (connect settings) disconnect (loop settings)
   where
     disconnect = hClose . socket
-    loop settings st    = runReaderT (run settings) st
+    loop settings st    = evalStateT (run settings) st
     opts = info parser idm
     parser = AppSettings <$> argument str (metavar "SERVER")
                          <*> argument auto (metavar "PORT")
@@ -57,14 +58,51 @@ run settings = do
     write "NICK" (nick settings)
     write "USER" ((nick settings) ++" 0 * :tutorial bot")
     write "JOIN" (chan settings)
-    asks socket >>= listen
- 
+    gets socket >>= listen
+
+
+reconnect :: Net ()
+reconnect = do
+    h <- gets socket
+    s <- gets botSettings
+    io $ hClose h
+    b <- io $ connect s
+    put b
+
+
+readInputLine :: Handle -> IO (Maybe String)
+readInputLine h = do
+    res <- try $ init <$> hGetLine h
+    case res of
+      Right l                -> return (Just l)
+      Left (SomeException _) -> return Nothing
+
+
+timeoutAndPing :: Handle -> Int -> Int -> String -> IO (Maybe String)
+timeoutAndPing h lag time msg = do
+    threadDelay (lag * 1000000)
+    ping h msg
+    threadDelay (time * 1000000)
+    putStrLn "Timed out..."
+    hFlush stdout
+    return Nothing
+
+ping :: Handle -> String -> IO ()
+ping h = writeIO h "PING"
+
 -- Process each line from the server
 listen :: Handle -> Net ()
 listen h = forever $ do
-    s <- init `fmap` io (hGetLine h)
-    io (putStrLn s >> hFlush stdout)
-    if ping s then pong s else eval (clean s)
+    a <- gets botSettings
+    msg <- io $ async $ readInputLine h
+    timeout <- io $ async $ timeoutAndPing h 60 10 (nick a)
+    r <- io $ waitAnyCancel [msg]
+    case r of
+      (_, Just s) -> do
+
+          io (putStrLn s >> hFlush stdout)
+          if ping s then pong s else eval (clean s)
+      (_, Nothing) -> reconnect
   where
     forever a = a >> forever a
     clean     = drop 1 . dropWhile (/= ':') . drop 1
@@ -131,16 +169,20 @@ messageProcessA cmd args = do
 -- Send a privmsg to the current chan + server
 privmsg :: String -> Net ()
 privmsg s = do
-    settings <- asks botSettings
+    settings <- gets botSettings
     let ch = chan settings
     mapM_ (\l -> write "PRIVMSG" (ch ++ " :" ++ l)) $ lines s
- 
+
+writeIO :: Handle -> String -> String -> IO ()
+writeIO h s t = do
+  hPrintf h "%s %s\r\n" s t
+  printf    "> %s %s\n" s t
+
 -- Send a message out to the server we're currently connected to
 write :: String -> String -> Net ()
 write s t = do
-    h <- asks socket
-    io $ hPrintf h "%s %s\r\n" s t
-    io $ printf    "> %s %s\n" s t
+    h <- gets socket
+    io $ writeIO h s t
     io $ threadDelay $ round $ secondsDelay * 1000000
   where
     secondsDelay = 1

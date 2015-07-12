@@ -9,6 +9,7 @@ executable clonebot
   build-depends: base
                , text
                , network
+               , async
                , mtl
                , process
                , optparse-applicative
