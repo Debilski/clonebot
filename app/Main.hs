@@ -78,6 +78,7 @@ data Command = Command { commandName :: String
 
 commands :: [Command]
 commands = [ Command "!help"                (\_ -> privmsg "Usage: !please-help")
+           , Command "!about"               (\_ -> privmsg about)
            , Command "!please-help"         (\_ -> privmsg pleaseHelp)
            , Command "!lunchy-munchy"       (\_ -> messageProcess "./LunchParse")
            , Command "!is-it-safe-outside?" (\a -> messageProcessA "./WeatherParse" (words a))
@@ -88,6 +89,8 @@ commands = [ Command "!help"                (\_ -> privmsg "Usage: !please-help"
            ]
 
 pleaseHelp = "Available commands: " ++ (intercalate " " (fmap commandName commands)) ++ "\nSee http://blog.itb.pri for more info."
+
+about = "ITB clonebot. Source code and issue tracker @ https://github.com/Debilski/clonebot/"
 
 -- Dispatch a command
 eval :: String -> Net ()
