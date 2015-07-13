@@ -96,7 +96,7 @@ listen h = forever $ do
     a <- gets botSettings
     msg <- io $ async $ readInputLine h
     timeout <- io $ async $ timeoutAndPing h 60 10 (nick a)
-    r <- io $ waitAnyCancel [msg]
+    r <- io $ waitAnyCancel [msg, timeout]
     case r of
       (_, Just s) -> do
 
