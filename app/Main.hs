@@ -26,7 +26,7 @@ defaultSettings = AppSettings { server = "irc.freenode.org"
 type Net = StateT Bot IO
 data Bot = Bot { socket :: Handle
                , botSettings :: AppSettings }
- 
+
 -- Set up actions to run on start and end, and run the main loop
 main :: IO ()
 main = execParser opts >>= \settings -> bracket (connect settings) disconnect (loop settings)
@@ -38,7 +38,7 @@ main = execParser opts >>= \settings -> bracket (connect settings) disconnect (l
                          <*> argument auto (metavar "PORT")
                          <*> argument str (metavar "CHAN")
                          <*> argument str (metavar "NICK")
- 
+
 -- Connect to the server and return the initial bot state
 connect :: AppSettings -> IO Bot
 connect settings = notify $ do
@@ -50,7 +50,7 @@ connect settings = notify $ do
         (printf "Connecting to %s ... " (server settings) >> hFlush stdout)
         (putStrLn "done.")
         a
- 
+
 -- We're in the Net monad now, so we've connected successfully
 -- Join a channel, and start processing commands
 run :: AppSettings -> Net ()
@@ -165,7 +165,7 @@ messageProcessA cmd args = do
     exitCode <- io $ waitForProcess jHandle
     io $ putStrLn $ "Exit code: " ++ show exitCode
     io $ hFlush stdout
- 
+
 -- Send a privmsg to the current chan + server
 privmsg :: String -> Net ()
 privmsg s = do
@@ -186,7 +186,7 @@ write s t = do
     io $ threadDelay $ round $ secondsDelay * 1000000
   where
     secondsDelay = 1
- 
+
 -- Convenience.
 io :: IO a -> Net a
 io = liftIO
