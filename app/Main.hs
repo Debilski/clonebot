@@ -56,18 +56,22 @@ connect settings = notify $ do
 run :: AppSettings -> Net ()
 run settings = do
     write "NICK" (nick settings)
-    write "USER" ((nick settings) ++" 0 * :tutorial bot")
+    write "USER" ((nick settings) ++" 0 * :generic itb bot")
     write "JOIN" (chan settings)
     gets socket >>= listen
 
 
 reconnect :: Net ()
 reconnect = do
+    io $ putStrLn ("Reconnecting in " ++ (show delay) ++ " seconds")
+    io $ threadDelay (delay * 1000000)
     h <- gets socket
     s <- gets botSettings
     io $ hClose h
     b <- io $ connect s
     put b
+  where
+    delay = 3
 
 
 readInputLine :: Handle -> IO (Maybe String)
@@ -123,6 +127,7 @@ commands = [ Command "!help"                (\_ -> privmsg "Usage: !please-help"
            , Command "!what-the-load"       (\_ -> messageProcess "./MonitParse")
            , Command "!what-the-swap"       (\_ -> messageProcess "./MemParse")
            , Command "!what-the-dickens"    (\_ -> messageProcess "./BookPrint")
+           , Command "!mitesser"            (\_ -> messageProcessA "/bin/sh" ["-c", "curl -s  http://www.cms.hu-berlin.de/de/dl/netze/wlan/stats/details/Berlin-MitteCampusNordHannoverscheStr7MensaNord.html | grep Aktive |sed -r \"s/[^0-9]//g\""])
            , Command "!what-the-math"       (messageLambda)
            ]
 
