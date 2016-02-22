@@ -146,8 +146,8 @@ eval msg                       = maybe (return ()) (applyCommand msg) (find (\c 
 
 messageLambda :: String -> Net ()
 messageLambda math = do
-    (_, Just hout, Just herr, jHandle) <- io $ createProcess (proc "/usr/bin/cabal" ["exec", "lambdabot", "--", "-e", "> " ++ math])
-                                              { cwd = Just "/home/schuppner/Projects/lambdabot/lambdabot"
+    (_, Just hout, Just herr, jHandle) <- io $ createProcess (proc "/home/schuppner/.local/bin/stack" ["exec", "lambdabot", "--", "-e", "> " ++ math])
+                                              { cwd = Just "/home/schuppner/Projects/lambdabot/stack/simple"
                                               , std_out = CreatePipe
                                               , std_err = CreatePipe }
     (io $ hGetContents hout) >>= privmsg
@@ -195,4 +195,3 @@ write s t = do
 -- Convenience.
 io :: IO a -> Net a
 io = liftIO
-

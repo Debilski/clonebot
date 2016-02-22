@@ -1,0 +1,16 @@
+name: clonebot
+version: 0.1.0
+
+dependencies:
+  - base
+  - text
+  - network
+  - async
+  - mtl
+  - process
+  - optparse-applicative
+
+executables:
+  clonebot:
+    main: app/Main.hs
+
