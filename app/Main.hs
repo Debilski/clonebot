@@ -10,6 +10,7 @@ import Options.Applicative
 import System.Exit
 import System.IO
 import System.Process
+import System.Systemd.Daemon (notifyWatchdog)
 import Text.Printf
 
 data AppSettings = AppSettings { server :: String
@@ -105,6 +106,7 @@ listen h = forever $ do
       (_, Just s) -> do
 
           io (putStrLn s >> hFlush stdout)
+          io notifyWatchdog
           if ping s then pong s else eval (clean s)
       (_, Nothing) -> reconnect
   where
@@ -124,10 +126,13 @@ commands = [ Command "!help"                (\_ -> privmsg "Usage: !please-help"
            , Command "!please-help"         (\_ -> privmsg pleaseHelp)
            , Command "!lunchy-munchy"       (\_ -> messageProcess "./LunchParse")
            , Command "!is-it-safe-outside?" (\a -> messageProcessA "./WeatherParse" (words a))
+           , Command "!is-it-save-outside?" (\_ -> privmsg "Did you mean: !is-it-safe-outside?")
+           , Command "!tip-of-the-day"      (\_ -> messageProcess "./TipOfTheDay")
            , Command "!what-the-load"       (\_ -> messageProcess "./MonitParse")
            , Command "!what-the-swap"       (\_ -> messageProcess "./MemParse")
            , Command "!what-the-dickens"    (\_ -> messageProcess "./BookPrint")
-           , Command "!mitesser"            (\_ -> messageProcessA "/bin/sh" ["-c", "curl -s  http://www.cms.hu-berlin.de/de/dl/netze/wlan/stats/details/Berlin-MitteCampusNordHannoverscheStr7MensaNord.html | grep Aktive |sed -r \"s/[^0-9]//g\""])
+           , Command "!mitesser"            (\_ -> messageProcessA "/bin/sh" ["-c", "curl -s  https://www.cms.hu-berlin.de/de/dl/netze/wlan/stats/details/Berlin-MitteCampusNordHannoverscheStr7MensaNord.html | grep Aktive |sed -r \"s/[^0-9]//g\""])
+           , Command "!euro2016-ranks"      (\_ -> messageProcessA "/bin/bash" ["-c", "xml_grep --html --text_only '*/td[@class=\"mg_class\"]' <(/usr/bin/curl https://www.kicktipp.de/itb-supertippers/gesamtuebersicht) | head -5 | nl"])
            , Command "!what-the-math"       (messageLambda)
            ]
 
@@ -188,6 +193,7 @@ write :: String -> String -> Net ()
 write s t = do
     h <- gets socket
     io $ writeIO h s t
+    io $ notifyWatchdog
     io $ threadDelay $ round $ secondsDelay * 1000000
   where
     secondsDelay = 1

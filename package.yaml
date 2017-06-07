@@ -9,6 +9,7 @@ dependencies:
   - mtl
   - process
   - optparse-applicative
+  - systemd
 
 executables:
   clonebot:
